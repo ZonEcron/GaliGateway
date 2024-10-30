@@ -1,0 +1,28 @@
+{
+  "name": "galigateway",
+  "version": "1.0.0",
+  "description": "Gateway between a Galican timer and FlowAgility platform",
+  "main": "\"\"",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ZonEcron/GaliGateway.git"
+  },
+  "keywords": [
+    "Galican",
+    "Timer",
+    "FlowAgility",
+    "Gateway"
+  ],
+  "author": "Jon Bilbao",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ZonEcron/GaliGateway/issues"
+  },
+  "homepage": "https://github.com/ZonEcron/GaliGateway#readme",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

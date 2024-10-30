@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galican Gateway</title>
+    <style>
+        div {
+            border-bottom: 1px solid black;
+            padding: 10px 10px 30px 10px;
+        }
+
+        button,
+        input,
+        label {
+            display: inline-block;
+            margin: 5px;
+        }
+
+        label {
+            width: 200px;
+        }
+
+        input {
+            width: 300px;
+        }
+
+        button {
+            width: 100px;
+        }
+
+        [id$="Status"] {
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <label>Timer local IP:</label><input id="timerIP" /><br>
+        <label id="timerStatus">Timer Disconnected</label><button id="timerButton" onclick="connectTimer()">Connect</button><br>
+    </div><br>
+    <div>
+        <label>Remote Server IP:</label><input id="serverIP" /><br>
+        <label id="serverStatus">Server Disconnected</label><button id="serverButton" onclick="connectServer()">Connect</button><br>
+    </div>
+
+    <script>
+        const timerIP = document.getElementById("timerIP");
+        const timerStatus = document.getElementById("timerStatus");
+        const timerButton = document.getElementById("timerButton");
+        let timerFlag = false;
+        let timerConn;
+
+        const serverIP = document.getElementById("serverIP");
+        const serverStatus = document.getElementById("serverStatus");
+        const serverButton = document.getElementById("serverButton");
+        let serverFlag = false;
+        let serverConn;
+
+        let timer = {
+            time: 0,
+            faults: 0,
+            refusals: 0,
+            elimination: 0,
+            running: false,
+            precission: 1,
+            countdown: 0,
+        };
+
+        function connectTimer() {
+
+            if (timerFlag) {
+                timerConn.close();
+            } else {
+                console.log('ws://' + timerIP.value + '/timerws');
+                timerConn = new WebSocket('ws://' + timerIP.value + '/timerws');
+
+                timerConn.onopen = () => {
+                    console.log("Timer connected");
+                    timerStatus.innerHTML = "Timer Connected";
+                    timerStatus.style.color = "green";
+                    timerButton.innerHTML = "Disconnect";
+                    timerFlag = true;
+                }
+
+                timerConn.onmessage = (message) => {
+
+                    // {"time":42764, "faults":0, "refusals":1, "elimination":0, "running":false, "precission":1, "countdown":0,"uptime":9653501}
+                    // console.log(`From Timer:\n${message.data}\n`);
+
+                    const parsedData = checkJSON(message.data);
+
+                    if (parsedData) {
+
+                        let sendToFlowAgility = false;
+
+                        if ('running' in parsedData) {
+                            if (parsedData.running != timer.running) sendToFlowAgility = true;
+                        }
+
+                        for (let property in timer) {
+                            if (parsedData.hasOwnProperty(property)) {
+                                timer[property] = parsedData[property];
+                            }
+                        }
+
+                        if (sendToFlowAgility && serverFlag) {
+
+                            const modo = timer.running
+                                ? (timer.countdown ? 'g' : 'i')
+                                : (timer.countdown ? 'o' : 'p');
+
+                            const telegrama = `${modo}${timer.faults}${timer.refusals}${timer.elimination}${timer.time.toString().padStart(7, '0')}`;
+
+                            console.log('From Timer: ', message.data);
+                            console.log('To FlowAgility: ', telegrama);
+
+                            serverConn.send(telegrama);
+
+                        }
+
+                    }
+
+                }
+
+                timerConn.onclose = () => {
+                    console.log("Timer disconnected");
+                    timerStatus.innerHTML = "Timer disconnected";
+                    timerStatus.style.color = "red";
+                    timerButton.innerHTML = "Connect";
+                    timerFlag = false;
+                }
+            }
+        }
+
+        function connectServer() {
+
+            if (serverFlag) {
+                serverConn.close();
+            } else {
+                serverConn = new WebSocket('ws://' + serverIP.value); // change to wss at convenience
+
+                serverConn.onopen = () => {
+                    console.log("Server connected");
+                    serverStatus.innerHTML = "Server connected";
+                    serverStatus.style.color = "green";
+                    serverButton.innerHTML = "Disconnect";
+                    serverFlag = true;
+                }
+
+                serverConn.onmessage = (message) => {
+
+                    console.log('From FA:', message.data);
+
+                    switch (message.data[0]) {
+                        case 'g':
+                            timer.running = true;
+                            timer.countdown = true;
+                            break;
+                        case 'i':
+                            timer.running = true;
+                            timer.countdown = false;
+                            break;
+                        case 'o':
+                            timer.running = false;
+                            timer.countdown = true;
+                            break;
+                        case 'p':
+                            timer.running = false;
+                            timer.countdown = false;
+                            break;
+                        default:
+                            return;
+                    }
+
+                    timer.faults = parseInt(message.data[1]);
+                    timer.refusals = parseInt(message.data[2]);
+                    timer.elimination = parseInt(message.data[3]);
+
+
+                    if (message.data === 'p0000000000') {
+                        timer.running = false;
+                        timer.time = 0;
+                        const { precission, uptime, ...objToSend } = timer;
+                        timerConn.send(JSON.stringify(objToSend));
+                        console.log("To Timer", JSON.stringify(objToSend));
+                    } else if (timerFlag && (message.data[0] === 'o' || message.data[0] === 'g')) {
+                        timer.running = message.data[0] === 'g';
+                        timer.time = parseInt(message.data.slice(-7));
+                        const { precission, uptime, ...objToSend } = timer;
+                        timerConn.send(JSON.stringify(objToSend));
+                        console.log("To Timer", JSON.stringify(objToSend));
+                    } else if (timerFlag && (message.data[0] === 'i' || message.data[0] === 'p')) {
+                        const { time, running, countdown, precission, uptime, ...objToSend } = timer;
+                        timerConn.send(JSON.stringify(objToSend));
+                        console.log("To Timer", JSON.stringify(objToSend));
+                    }
+
+                }
+
+                serverConn.onclose = () => {
+                    console.log("Server Disconnected");
+                    serverStatus.innerHTML = "Server Disconnected";
+                    serverStatus.style.color = "red";
+                    serverButton.innerHTML = "Connect";
+                    serverFlag = false;
+                }
+            }
+        }
+
+        function checkJSON(JSONstring) {
+            try {
+                const parsedData = JSON.parse(JSONstring);
+                return parsedData;
+            } catch (error) {
+                return null;
+            }
+        }
+
+    </script>
+
+</body>
+
+</html>
