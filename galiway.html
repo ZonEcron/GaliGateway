@@ -2,225 +2,268 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galican Gateway</title>
-    <style>
-        div {
-            border-bottom: 1px solid black;
-            padding: 10px 10px 30px 10px;
-        }
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Galican Gateway</title>
+	<style>
+		div {
+			border-bottom: 1px solid black;
+			padding: 10px 10px 30px 10px;
+		}
 
-        button,
-        input,
-        label {
-            display: inline-block;
-            margin: 5px;
-        }
+		button,
+		input,
+		label {
+			display: inline-block;
+			margin: 5px;
+		}
 
-        label {
-            width: 200px;
-        }
+		label {
+			width: 200px;
+		}
 
-        input {
-            width: 300px;
-        }
+		input {
+			width: 300px;
+		}
 
-        button {
-            width: 100px;
-        }
+		button {
+			width: 100px;
+			margin-left: 0;
+		}
 
-        [id$="Status"] {
-            font-weight: bold;
-            color: red;
-        }
-    </style>
+		[id$="Status"] {
+			font-weight: bold;
+			color: red;
+		}
+	</style>
 </head>
 
 <body>
-    <div>
-        <label>Timer local IP:</label><input id="timerIP" /><br>
-        <label id="timerStatus">Timer Disconnected</label><button id="timerButton" onclick="connectTimer()">Connect</button><br>
-    </div><br>
-    <div>
-        <label>Remote Server IP:</label><input id="serverIP" /><br>
-        <label id="serverStatus">Server Disconnected</label><button id="serverButton" onclick="connectServer()">Connect</button><br>
-    </div>
+	<div>
+		<h2>Galican Timer Gateway</h2>
+		<p>Gateway between a Galican timer and FlowAgility platform</p>
+		<p>Use this code in FA platform: </p>
+		<h3 id="macForFA"></h3>
+	</div>
+	<div>
+		<label>Galican timer local IP:</label><select id="timerWStype" disabled>
+			<option value="ws://" selected>ws://</option>
+			<option value="wss://">wss://</option>
+		</select><input id="timerIP" placeholder="192.168.4.1" /><label style="width: fit-content;">/timerws</label><br>
+		<label id="timerStatus">Timer Disconnected</label><button id="timerButton"
+			onclick="connectTimer()">Connect</button><br>
+	</div><br>
+	<div>
+		<label>FlowAgility custom URL:</label><select id="serverWStype">
+			<option value="ws://">ws://</option>
+			<option value="wss://" selected>wss://</option>
+		</select><input id="serverIP" placeholder="flowagility.com/12345678ABCD" /><br>
+		<label id="serverStatus">Server Disconnected</label><button id="serverButton"
+			onclick="connectServer()">Connect</button><br>
+	</div>
 
-    <script>
-        const timerIP = document.getElementById("timerIP");
-        const timerStatus = document.getElementById("timerStatus");
-        const timerButton = document.getElementById("timerButton");
-        let timerFlag = false;
-        let timerConn;
+	<script>
 
-        const serverIP = document.getElementById("serverIP");
-        const serverStatus = document.getElementById("serverStatus");
-        const serverButton = document.getElementById("serverButton");
-        let serverFlag = false;
-        let serverConn;
+		const timerWStype = document.getElementById("timerWStype");
+		const timerIP = document.getElementById("timerIP");
+		const timerStatus = document.getElementById("timerStatus");
+		const timerButton = document.getElementById("timerButton");
+		let timerFlag = false;
+		let timerConn;
 
-        let timer = {
-            time: 0,
-            faults: 0,
-            refusals: 0,
-            elimination: 0,
-            running: false,
-            precission: 1,
-            countdown: 0,
-        };
+		const serverWStype = document.getElementById("serverWStype");
+		const serverIP = document.getElementById("serverIP");
+		const serverStatus = document.getElementById("serverStatus");
+		const serverButton = document.getElementById("serverButton");
+		let serverFlag = false;
+		let serverConn;
 
-        function connectTimer() {
+		let timer = {
+			time: 0,
+			faults: 0,
+			refusals: 0,
+			elimination: 0,
+			running: false,
+			countdown: 0,
+		};
 
-            if (timerFlag) {
-                timerConn.close();
-            } else {
-                console.log('ws://' + timerIP.value + '/timerws');
-                timerConn = new WebSocket('ws://' + timerIP.value + '/timerws');
+		const mac = readLocal("randomMac") || saveLocal("randomMac", randomMac(12));
+		const macForFA = document.getElementById("macForFA");
+		macForFA.innerHTML = mac;
 
-                timerConn.onopen = () => {
-                    console.log("Timer connected");
-                    timerStatus.innerHTML = "Timer Connected";
-                    timerStatus.style.color = "green";
-                    timerButton.innerHTML = "Disconnect";
-                    timerFlag = true;
-                }
+		function connectTimer() {
 
-                timerConn.onmessage = (message) => {
+			if (timerFlag) {
+				timerConn.close();
+			} else {
 
-                    // {"time":42764, "faults":0, "refusals":1, "elimination":0, "running":false, "precission":1, "countdown":0,"uptime":9653501}
-                    // console.log(`From Timer:\n${message.data}\n`);
+				timerConn = new WebSocket(timerWStype.value + timerIP.value + '/timerws');
 
-                    const parsedData = checkJSON(message.data);
+				timerConn.onopen = () => {
+					console.log("Timer connected");
+					timerStatus.innerHTML = "Timer Connected";
+					timerStatus.style.color = "green";
+					timerButton.innerHTML = "Disconnect";
+					timerFlag = true;
+				}
 
-                    if (parsedData) {
+				timerConn.onmessage = (message) => {
 
-                        let sendToFlowAgility = false;
+					// Example of Galican timer telegram
+					// {"time":42764, "faults":0, "refusals":1, "elimination":0, "running":false, "precission":1, "countdown":0,"uptime":9653501}
 
-                        if ('running' in parsedData) {
-                            if (parsedData.running != timer.running) sendToFlowAgility = true;
-                        }
+					// console.log(`From Timer:\n${message.data}\n`);
 
-                        for (let property in timer) {
-                            if (parsedData.hasOwnProperty(property)) {
-                                timer[property] = parsedData[property];
-                            }
-                        }
+					const parsedData = checkJSON(message.data);
 
-                        if (sendToFlowAgility && serverFlag) {
+					if (parsedData) {
 
-                            const modo = timer.running
-                                ? (timer.countdown ? 'g' : 'i')
-                                : (timer.countdown ? 'o' : 'p');
+						let sendToFlowAgility = false;
 
-                            const telegrama = `${modo}${timer.faults}${timer.refusals}${timer.elimination}${timer.time.toString().padStart(7, '0')}`;
+						if ('running' in parsedData) {
+							if (parsedData.running != timer.running) {
+								sendToFlowAgility = true;
+								console.log('From Timer: ', message.data);
+							}
+						}
 
-                            console.log('From Timer: ', message.data);
-                            console.log('To FlowAgility: ', telegrama);
+						for (let property in timer) {
+							if (parsedData.hasOwnProperty(property)) {
+								timer[property] = parsedData[property];
+							}
+						}
 
-                            serverConn.send(telegrama);
+						if (sendToFlowAgility && serverFlag) {
 
-                        }
+							const telegrama = statusToFA();
 
-                    }
+							console.log('To FlowAgility: ', telegrama);
+							console.log();
 
-                }
+							serverConn.send(telegrama);
 
-                timerConn.onclose = () => {
-                    console.log("Timer disconnected");
-                    timerStatus.innerHTML = "Timer disconnected";
-                    timerStatus.style.color = "red";
-                    timerButton.innerHTML = "Connect";
-                    timerFlag = false;
-                }
-            }
-        }
+						}
 
-        function connectServer() {
+					}
 
-            if (serverFlag) {
-                serverConn.close();
-            } else {
-                serverConn = new WebSocket('ws://' + serverIP.value); // change to wss at convenience
+				}
 
-                serverConn.onopen = () => {
-                    console.log("Server connected");
-                    serverStatus.innerHTML = "Server connected";
-                    serverStatus.style.color = "green";
-                    serverButton.innerHTML = "Disconnect";
-                    serverFlag = true;
-                }
+				timerConn.onclose = () => {
+					console.log("Timer Disconnected");
+					timerStatus.innerHTML = "Timer Disconnected";
+					timerStatus.style.color = "red";
+					timerButton.innerHTML = "Connect";
+					timerFlag = false;
+				}
+			}
+		}
 
-                serverConn.onmessage = (message) => {
+		function connectServer() {
 
-                    console.log('From FA:', message.data);
+			if (serverFlag) {
+				serverConn.close();
+			} else {
+				serverConn = new WebSocket(serverWStype.value + serverIP.value);
 
-                    switch (message.data[0]) {
-                        case 'g':
-                            timer.running = true;
-                            timer.countdown = true;
-                            break;
-                        case 'i':
-                            timer.running = true;
-                            timer.countdown = false;
-                            break;
-                        case 'o':
-                            timer.running = false;
-                            timer.countdown = true;
-                            break;
-                        case 'p':
-                            timer.running = false;
-                            timer.countdown = false;
-                            break;
-                        default:
-                            return;
-                    }
+				serverConn.onopen = () => {
+					console.log("Server connected");
+					serverStatus.innerHTML = "Server connected";
+					serverStatus.style.color = "green";
+					serverButton.innerHTML = "Disconnect";
+					serverFlag = true;
+				}
 
-                    timer.faults = parseInt(message.data[1]);
-                    timer.refusals = parseInt(message.data[2]);
-                    timer.elimination = parseInt(message.data[3]);
+				serverConn.onmessage = (message) => {
 
+					console.log('From FA:', message.data);
 
-                    if (message.data === 'p0000000000') {
-                        timer.running = false;
-                        timer.time = 0;
-                        const { precission, uptime, ...objToSend } = timer;
-                        timerConn.send(JSON.stringify(objToSend));
-                        console.log("To Timer", JSON.stringify(objToSend));
-                    } else if (timerFlag && (message.data[0] === 'o' || message.data[0] === 'g')) {
-                        timer.running = message.data[0] === 'g';
-                        timer.time = parseInt(message.data.slice(-7));
-                        const { precission, uptime, ...objToSend } = timer;
-                        timerConn.send(JSON.stringify(objToSend));
-                        console.log("To Timer", JSON.stringify(objToSend));
-                    } else if (timerFlag && (message.data[0] === 'i' || message.data[0] === 'p')) {
-                        const { time, running, countdown, precission, uptime, ...objToSend } = timer;
-                        timerConn.send(JSON.stringify(objToSend));
-                        console.log("To Timer", JSON.stringify(objToSend));
-                    }
+					const formato = /^[a-z]\d{10}$/;
+					if (formato.test(message.data)) {
 
-                }
+						timer.faults = parseInt(message.data[1]);
+						timer.refusals = parseInt(message.data[2]);
+						timer.elimination = parseInt(message.data[3]);
 
-                serverConn.onclose = () => {
-                    console.log("Server Disconnected");
-                    serverStatus.innerHTML = "Server Disconnected";
-                    serverStatus.style.color = "red";
-                    serverButton.innerHTML = "Connect";
-                    serverFlag = false;
-                }
-            }
-        }
+						const { faults, refusals, elimination } = timer;
+						let objToSend = { faults, refusals, elimination };
 
-        function checkJSON(JSONstring) {
-            try {
-                const parsedData = JSON.parse(JSONstring);
-                return parsedData;
-            } catch (error) {
-                return null;
-            }
-        }
+						if (message.data === 'p0000000000') {
+							objToSend.reset = true;
+							timer.time = 0;
+							timer.faults = 0;
+							timer.refusals = 0;
+							timer.elimination = 0;
+							timer.running = false;
+							timer.countdown = 0;
+						}
 
-    </script>
+						timerConn.send(JSON.stringify(objToSend));
+						console.log("To Timer", JSON.stringify(objToSend));
+
+						serverConn.send('#' + message.data);
+
+					} else if (message.data === 'd0') {
+						const telegrama = statusToFA();
+						serverConn.send('#' + telegrama);
+
+					} else {
+						serverConn.send('!' + message.data);
+
+					}
+				}
+
+				serverConn.onclose = () => {
+					console.log("Server Disconnected");
+					serverStatus.innerHTML = "Server Disconnected";
+					serverStatus.style.color = "red";
+					serverButton.innerHTML = "Connect";
+					serverFlag = false;
+				}
+			}
+		}
+
+		function checkJSON(JSONstring) {
+			try {
+				const parsedData = JSON.parse(JSONstring);
+				return parsedData;
+			} catch (error) {
+				return null;
+			}
+		}
+
+		function statusToFA() {
+			const modo = timer.running && !timer.countdown ? 'i' : 'p';
+			return `${modo}${timer.faults}${timer.refusals}${timer.elimination}${timer.time.toString().padStart(7, '0')}`;
+		}
+
+		function randomMac(length) {
+			var result = '';
+			var characters = 'ABCDEF0123456789';
+			var charactersLength = characters.length;
+			for (var i = 0; i < length; i++) {
+				result += characters.charAt(Math.floor(Math.random() * charactersLength));
+			}
+			return result;
+		}
+
+		function readLocal(keyName) {
+			try {
+				return localStorage.getItem(keyName);
+			} catch (error) {
+				return null;
+			}
+		}
+
+		function saveLocal(keyName, value) {
+			try {
+				localStorage.setItem(keyName, value);
+				return value;
+			} catch (error) {
+				return null;
+			}
+		}
+
+	</script>
 
 </body>
 

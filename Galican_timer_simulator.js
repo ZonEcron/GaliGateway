@@ -1,6 +1,5 @@
-// Emulador de servidor de Flow Agility 
+// Emulador de servidor de crono Galican
 //  - Muestra en consola los mensajes recibidos
-//  - Envia los mensajes escritos en consola
 //  - Si se introduce en consola s simula el arranque o parada del crono
 
 
@@ -26,10 +25,11 @@ var timer = {
 
 
 // Mensajes de inicio
-console.log("\n\nWebSocket Server running on port localhost:3000\n\nType  s + enter   to emulate timer start/stop")
+console.clear();
+console.log("\nGalican Timer Simulator running on localhost:3000\n\nType  s + enter   to emulate timer start/stop\n")
 
 
-// envio ciclico del estado del crono 
+// envio ciclico del estado del crono cada 500 ms.
 setInterval(() => {
 
 	const ahora = new Date().getTime();
@@ -44,28 +44,36 @@ setInterval(() => {
 }, 500);
 
 
-// imprimir lo que se recive
+// imprimir lo que se recibe si es json valido
 wss.on('connection', function connection(ws) {
-	console.log('Client connected');
-	ws.on('message', function message(data) {
+	console.log('Client connected\n');
 
+	ws.on('message', function message(data) {
 		const parsedData = checkJSON(data);
 
 		if (parsedData) {
-			console.log('received: %s', parsedData);
-			for (let property in timer) {
-				if (parsedData.hasOwnProperty(property)) {
-					timer[property] = parsedData[property];
+			console.log('received:', JSON.stringify(parsedData, null, 2), '\n');
+
+			if (parsedData.hasOwnProperty("reset")) {
+				timer.time = 0;
+				timer.faults = 0;
+				timer.refusals = 0;
+				timer.elimination = 0;
+				timer.running = false;
+
+			} else {
+				for (let property in timer) {
+					if (parsedData.hasOwnProperty(property)) {
+						timer[property] = parsedData[property];
+					}
 				}
 			}
-
 		}
-
 
 	});
 });
 
-// enviar según lo que se escriba en consola
+// start stop del crono tecleando s en consola
 stdin.addListener("data", d => {
 	const data = d.toString().replace('\r', '').replace('\n', '');
 	if (data === 's') {
@@ -77,14 +85,12 @@ stdin.addListener("data", d => {
 		} else {
 			timer.running = true;
 			inicio = new Date().getTime();
+			timer.faults = 0;
+			timer.refusals = 0;
+			timer.elimination = 0;
 			console.log("Timer started");
 		}
 
-	} else {
-		// si no se ha tecleado una 's', enviar lo que se escribe en consola
-		wss.clients.forEach(client => {
-			client.send(data);
-		});
 	}
 });
 
