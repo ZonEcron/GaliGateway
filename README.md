@@ -1,30 +1,51 @@
 # GALIGATEWAY
 
-A standalone html file to act as gateway between a Galican Timer and FlowAgility platform.
+A standalone HTML file to act as a gateway between a Galican Timer and the FlowAgility platform.
 
 ## Usage
-Connect your laptop **to Galican timer over wifi**, and **to internet over ethernet**.
-Run the html on your laptop.
-Type the Galican timer ip and connect
-Type the generated mac on the Flow Agility platform secction to connect timers and press connect
-Copy the url provided by Flow Agility platform
-Type the url on the html and press connect
+1. Connect your laptop **to the Galican Timer over WiFi** and **to the internet over Ethernet**.
+2. Run the HTML file on your favourite browser in your laptop.
+3. Enter the Galican Timer IP address and connect.
+4. Enter the generated MAC address on the FlowAgility platform in the relevant section to connect the timers, then press "Connect."
+5. Copy the URL provided by the FlowAgility platform.
+6. Enter the URL in the HTML interface and press "Connect."
 
-## CAPABILITIES
-Currently just faults, refusals eliminations time and reset is supported.
-Timer times will be sent to FlowAgility platform on each timer start and stop.
-Faults, refusals, eliminations and reset will be sent to timer on each ocurrence in FlowAgility.
+## Capabilities
+Currently, only faults, refusals, eliminations, timing, and reset functions are supported.
+- Timer times will be sent to the FlowAgility platform at each timer start and stop.
+- Faults, refusals, eliminations, and resets will be sent to the timer for each occurrence in FlowAgility.
 
-## EMULATION
-A timer emulator and a FlowAgility server emulator are provided to be run for testing purposes.
-NodeJS 18 or higher is required.
-Unzip, and open a terminal in unziped fordel
-Type ```npm i```to instal dependencies.
-Type ```node FlowAgility_server_simulator.js``` to run FA simulator
-In another terminal in unziped folder type ```node Galican_timer_simulator.js``` to run Galican timer simulator
-In galican timer terminal press s + enter to simulate start and stop timer
-In FA simulator type 11 symbols format to send fauls refusals and elimination i.e.: 
-- i3210000000 will send 3 faults, 2 refusalas and 1 eliminated
-- p0000000000 wil send a reset
-se more about 11 symbols telegrams at: https://github.com/ZonEcron/ZonEcron-Interfacing/blob/main/WebsocketServer.md#3-message-diagram
+## Simulation
+A timer simulator and a FlowAgility server simulator are provided for testing purposes.
+- **Requirements:** Node.js 18 or higher
 
+1. Unzip the folder and open a terminal in the unzipped folder.
+
+2. Install dependencies:
+```bash
+    npm i
+```
+
+3. Run the HTML file on your favourite browser in your laptop.
+
+4. Run the FA server simulator:
+```bash
+    node FlowAgility_server_simulator.js
+```
+
+5. In a separate terminal within the unzipped folder, run the Galican Timer simulator:
+
+```bash
+    node Galican_timer_simulator.js
+```
+
+6. In the Galican Timer simulator, press `s` + `Enter` to simulate starting or stopping the timer.  
+7. In the FA server simulator, type an 11-symbol telegram format + `Enter` to send faults, refusals, and eliminations, for example:
+- `i3210000000` sends 3 faults, 2 refusals, and 1 elimination.
+- `p0000000000` sends a reset.
+
+Example of simulation done in Windows 10:
+![Simulation example](./images/simulating.PNG)
+
+## Notes
+Learn more about the 11-symbol telegram format at: [11-symbol telegram documentation](https://github.com/ZonEcron/ZonEcron-Interfacing/blob/main/WebsocketServer.md#3-message-diagram)
