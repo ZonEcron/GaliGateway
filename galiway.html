@@ -50,16 +50,14 @@
 			<option value="ws://" selected>ws://</option>
 			<option value="wss://">wss://</option>
 		</select><input id="timerIP" placeholder="192.168.4.1" /><label style="width: fit-content;">/timerws</label><br>
-		<label id="timerStatus">Timer Disconnected</label><button id="timerButton"
-			onclick="connectTimer()">Connect</button><br>
+		<label id="timerStatus">Timer Disconnected</label><button id="timerButton" onclick="connectTimer()">Connect</button><br>
 	</div><br>
 	<div>
 		<label>FlowAgility custom URL:</label><select id="serverWStype">
 			<option value="ws://">ws://</option>
 			<option value="wss://" selected>wss://</option>
 		</select><input id="serverIP" placeholder="flowagility.com/12345678ABCD" /><br>
-		<label id="serverStatus">Server Disconnected</label><button id="serverButton"
-			onclick="connectServer()">Connect</button><br>
+		<label id="serverStatus">Server Disconnected</label><button id="serverButton" onclick="connectServer()">Connect</button><br>
 	</div>
 
 	<script>
@@ -77,6 +75,8 @@
 		const serverButton = document.getElementById("serverButton");
 		let serverFlag = false;
 		let serverConn;
+		let serverPingInterval;
+		const serverPingDelay = 25000;
 
 		let timer = {
 			time: 0,
@@ -120,13 +120,13 @@
 
 						let sendToFlowAgility = false;
 
-						if ('running' in parsedData) {
-							if (parsedData.running != timer.running) {
+						if ('running' in parsedData && 'time' in parsedData) {
+							if (parsedData.running != timer.running || !parsedData.running && (parsedData.time != timer.time) ) {
 								sendToFlowAgility = true;
-								console.log('From Timer: ', message.data);
+								console.log('From Timer:', message.data);
 							}
 						}
-
+			
 						for (let property in timer) {
 							if (parsedData.hasOwnProperty(property)) {
 								timer[property] = parsedData[property];
@@ -134,18 +134,11 @@
 						}
 
 						if (sendToFlowAgility && serverFlag) {
-
 							const telegrama = statusToFA();
-
-							console.log('To FlowAgility: ', telegrama);
-							console.log();
-
 							serverConn.send(telegrama);
-
+							console.log('To FA: ', telegrama);
 						}
-
 					}
-
 				}
 
 				timerConn.onclose = () => {
@@ -171,6 +164,13 @@
 					serverStatus.style.color = "green";
 					serverButton.innerHTML = "Disconnect";
 					serverFlag = true;
+
+					clearInterval(serverPingInterval);
+					serverPingInterval = setInterval(() => {
+						serverConn.send(statusToFA());
+						console.log('To FA: PING');
+					}, serverPingDelay);
+
 				}
 
 				serverConn.onmessage = (message) => {
@@ -197,18 +197,22 @@
 							timer.countdown = 0;
 						}
 
-						timerConn.send(JSON.stringify(objToSend));
-						console.log("To Timer", JSON.stringify(objToSend));
+						if (timerFlag) {
+							timerConn.send(JSON.stringify(objToSend));
+							console.log("To Timer:", JSON.stringify(objToSend));
+						}
 
 						serverConn.send('#' + message.data);
+						console.log('To FA: #' + message.data);
 
 					} else if (message.data === 'd0') {
-						const telegrama = statusToFA();
-						serverConn.send('#' + telegrama);
+						const telegrama = '#' + statusToFA();
+						serverConn.send(telegrama);
+						console.log('To FA:' , telegrama);
 
 					} else {
 						serverConn.send('!' + message.data);
-
+						console.log('To FA:' , telegrama);
 					}
 				}
 
@@ -218,7 +222,14 @@
 					serverStatus.style.color = "red";
 					serverButton.innerHTML = "Connect";
 					serverFlag = false;
+					clearInterval(serverPingInterval);
 				}
+
+				serverConn.onerror = () => {
+					clearInterval(serverPingInterval);
+					serverConn.close();
+				}
+
 			}
 		}
 
