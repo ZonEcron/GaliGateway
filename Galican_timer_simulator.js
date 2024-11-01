@@ -10,17 +10,18 @@ const wss = new WebSocket.Server({ port: 3000, path: '/timerws' });
 
 
 //Variables globales
-var upDateTime = new Date().getTime();
-var inicio = new Date().getTime();
+var upDateTime = Date.now();
+var inicio = Date.now();
 var timer = {
-	"time": 0,
-	"faults": 0,
-	"refusals": 0,
-	"elimination": 0,
-	"running": false,
-	"precission": 1,
-	"countdown": 0,
-	"uptime": 0,
+	time: 0,
+	faults: 0,
+	refusals: 0,
+	elimination: 0,
+	running: false,
+	precission: 0,
+	countdown: 0,
+	coursewalk: false,
+	uptime: 0,
 }
 
 
@@ -34,7 +35,24 @@ setInterval(() => {
 
 	const ahora = new Date().getTime();
 
-	if (timer.running) timer.time = ahora - inicio;
+
+
+	if (timer.coursewalk) {
+		if (ahora > inicio) {
+			timer.time = 0;
+			timer.faults = 0;
+			timer.refusals = 0;
+			timer.elimination = 0;
+			timer.running = false;
+			timer.countdown = 0;
+			timer.coursewalk = false;
+		}  else {
+			timer.time = inicio - ahora;
+		}
+	} else if (timer.running) {
+		timer.time = ahora - inicio;
+	}
+
 	timer.uptime = ahora - upDateTime;
 
 	wss.clients.forEach(client => {
@@ -60,6 +78,20 @@ wss.on('connection', function connection(ws) {
 				timer.refusals = 0;
 				timer.elimination = 0;
 				timer.running = false;
+				timer.countdown = 0;
+				timer.coursewalk = 0;
+
+			} else if (parsedData.hasOwnProperty("coursewalk")) {
+				if (!timer.coursewalk) {
+					inicio = Date.now() + 420000;
+					timer.time = 0;
+					timer.faults = 0;
+					timer.refusals = 0;
+					timer.elimination = 0;
+					timer.running = false;
+					timer.countdown = 0;
+					timer.coursewalk = true;
+				}
 
 			} else {
 				for (let property in timer) {
@@ -80,17 +112,16 @@ stdin.addListener("data", d => {
 		// simular start y stop de crono al introducir 's' en consola
 		if (timer.running) {
 			timer.running = false;
-			timer.time = new Date().getTime() - inicio;
+			timer.time = Date.now() - inicio;
 			console.log("Timer stopped. Time:", timer.time);
 		} else {
 			timer.running = true;
-			inicio = new Date().getTime();
+			inicio = Date.now();
 			timer.faults = 0;
 			timer.refusals = 0;
 			timer.elimination = 0;
 			console.log("Timer started");
 		}
-
 	}
 });
 
