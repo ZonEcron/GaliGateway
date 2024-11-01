@@ -1,3 +1,4 @@
+let localSettings = checkJSON(readLocal("galiGateWay")) || {};
 
 const timerWStype = document.getElementById("timerWStype");
 const timerIP = document.getElementById("timerIP");
@@ -9,6 +10,7 @@ let timerReconnTimeoutActive = false;
 let timerReconnCountD;
 let timerReconnTimeLeft = 5;
 
+const macForFA = document.getElementById("macForFA");
 const serverWStype = document.getElementById("serverWStype");
 const serverIP = document.getElementById("serverIP");
 const serverStatus = document.getElementById("serverStatus");
@@ -20,6 +22,8 @@ let serverReconnTimeout;
 let serverReconnTimeoutActive = false;
 let serverReconnCountD;
 let serverReconnTimeLeft = 5;
+let serverCleanCloseAsked = false;
+let serverConnError = false;
 
 let timer = {
     time: 0,
@@ -31,16 +35,26 @@ let timer = {
     coursewalk: false,
 };
 
-const mac = readLocal("randomMac") || saveLocal("randomMac", randomMac(12));
-const macForFA = document.getElementById("macForFA");
-macForFA.innerHTML = mac;
+(function () {
+
+    localSettings.randomMac ||= randomMac(12);
+    macForFA.innerHTML = localSettings.randomMac;
+
+    timerWStype.selectedIndex = localSettings.timerWStype === 1 ? 1 : 0;
+    timerIP.value = localSettings.timerIP ||= '';;
+
+    serverWStype.selectedIndex = localSettings.serverWStype=== 0 ? 0 : 1;
+    serverIP.value = localSettings.serverIP ||= '';
+
+})();
+
 
 function connTimer() {
     if (timerConn.readyState !== WebSocket.CLOSED || timerReconnTimeoutActive) {
 
         timerConn.close();
 
-        // timerSelector.disabled = false;
+        // timerWStype.disabled = false;
         timerIP.disabled = false;
 
         clearTimeout(timerReconnTimeout);
@@ -67,7 +81,7 @@ function websocTimer() {
     if (timerConn instanceof WebSocket) timerConn.close();
     timerConn = new WebSocket(timerWStype.value + timerIP.value + '/timerws');
 
-    // timerSelector.disabled = true;
+    // timerWStype.disabled = true;
     timerIP.disabled = true;
 
     clearInterval(timerReconnCountD);
@@ -78,7 +92,13 @@ function websocTimer() {
     timerButton.innerHTML = "Cancel";
 
     timerConn.onopen = () => {
+
+        localSettings.timerWStype = timerWStype.selectedIndex;
+        localSettings.timerIP = timerIP.value;
+        saveLocal("galiGateWay", JSON.stringify(localSettings));
+
         clearInterval(timerReconnCountD);
+
         console.log("Timer Connected");
         timerStatus.innerHTML = "Timer Connected";
         timerStatus.style.color = "green";
@@ -93,18 +113,21 @@ function websocTimer() {
 
             let sendToFlowAgility = false;
 
-            if ('running' in parsedData && 'time' in parsedData) {
-                if (parsedData.running != timer.running || !parsedData.running && (parsedData.time != timer.time)) {
-                    sendToFlowAgility = true;
-                    console.log('From Timer:', message.data);
-                }
-            }
+            const oldTimer = { ...timer };
 
             for (let property in timer) {
                 if (parsedData.hasOwnProperty(property)) {
                     timer[property] = parsedData[property];
                 }
             }
+
+            const runMatch = oldTimer.running === timer.running;
+            const couseMatch = oldTimer.coursewalk === timer.coursewalk;
+            const timeMatch = oldTimer.time === timer.time;
+
+            if (!runMatch || !couseMatch) sendToFlowAgility = true; // if mode has changed
+
+            if (!timer.running && !timer.coursewalk && !timeMatch) sendToFlowAgility = true;  // if timer is stopped but time has changed
 
             if (sendToFlowAgility && (serverConn.readyState === WebSocket.OPEN)) {
                 const telegrama = statusToFA();
@@ -135,26 +158,31 @@ function websocTimer() {
     }
 }
 
+function serverCleanClose() {
 
+    serverIP.disabled = false;
+    serverWStype.disabled = false;
+
+    clearTimeout(serverReconnTimeout);
+    clearInterval(serverReconnCountD);
+
+    serverReconnTimeoutActive = false;
+
+    serverStatus.innerHTML = "Server Disconnected";
+    serverStatus.style.color = "red";
+    serverButton.innerHTML = "Connect";
+
+    clearInterval(serverPingInterval);
+
+}
 function connServer() {
     if (serverConn.readyState !== WebSocket.CLOSED || serverReconnTimeoutActive) {
-
         serverConn.close();
-
-        serverIP.disabled = false;
-
-        clearTimeout(serverReconnTimeout);
-        clearInterval(serverReconnCountD);
-
-        serverReconnTimeoutActive = false;
-
-        serverStatus.innerHTML = "Server Disconnected";
-        serverStatus.style.color = "red";
-        serverButton.innerHTML = "Connect";
-
-        clearInterval(serverPingInterval);
-
+        serverCleanCloseAsked = true;
+        serverConnError = false;
+        serverCleanClose();
     } else {
+        serverCleanCloseAsked = false;
         websocServer();
     }
 }
@@ -170,6 +198,7 @@ function websocServer() {
     serverConn = new WebSocket(serverWStype.value + serverIP.value);
 
     serverIP.disabled = true;
+    serverWStype.disabled = true;
 
     clearInterval(serverReconnCountD);
     clearTimeout(serverReconnTimeout);
@@ -180,6 +209,11 @@ function websocServer() {
 
     serverConn.onopen = () => {
 
+        localSettings.serverWStype = serverWStype.selectedIndex;
+        localSettings.serverIP = serverIP.value;
+        saveLocal("galiGateWay", JSON.stringify(localSettings));
+
+        serverConnError = false;
         clearInterval(serverReconnCountD);
 
         console.log("Server connected");
@@ -220,22 +254,31 @@ function websocServer() {
                     elimination: parseInt(message.data[3]),
                 };
 
-            } else {
-                objToSend = {
-                    reset: true,
+            } else if (message.data[0] === 'g') {
+                if (timer.coursewalk) {
+                    timer.coursewalk = 0;  // TODO this is a patch because Galican timer time cant be changed once it is coursewalking
+                    return;
+                } else {
+                    objToSend = {
+                        coursewalk: true,
+                    }
                 }
-                const telegrama = 'p0000000000';
-                serverConn.send(telegrama);
-                console.log('To FA:', telegrama);
-                timer = {
-                    time: 0,
-                    faults: 0,
-                    refusals: 0,
-                    elimination: 0,
-                    running: false,
-                    countdown: 0,
-                    coursewalk: false,
-                };
+
+            } else if (message.data[0] === 'o') {
+
+                // TODO this is a patch because Galican timer time cant be changed once it is coursewalking
+                if (timer.coursewalk) {
+                    if (timerConn.readyState === WebSocket.OPEN) {
+                        const telegrama1 = 'o000' + timer.time.toString().padStart(7, '0');
+                        serverConn.send(telegrama1);
+                        console.log('To FA:', telegrama1);
+
+                        const telegrama2 = 'g000' + timer.time.toString().padStart(7, '0');
+                        serverConn.send(telegrama2);
+                        console.log('To FA:', telegrama2);
+                    }
+                }
+                return; // ! Nothing is sent to timer
             }
 
             if (timerConn.readyState === WebSocket.OPEN) {
@@ -255,24 +298,31 @@ function websocServer() {
     }
 
     serverConn.onclose = () => {
-        console.log("Server Disconnected");
+        if (serverCleanCloseAsked || !serverConnError) serverCleanClose();
     }
 
     serverConn.onerror = () => {
-        clearInterval(serverPingInterval);
 
-        clearInterval(serverReconnCountD);
+        if (!serverCleanCloseAsked) {
 
-        serverStatus.innerHTML = "Retrying in 5s.";
-        serverStatus.style.color = "orange";
-        serverButton.innerHTML = "Cancel";
+            serverConnError = true;
 
-        serverReconnCountD = setInterval(reconnServer, 1000);
-        serverReconnTimeout = setTimeout(websocServer, 5000);
+            console.log('Server Connection Error');
 
-        serverReconnTimeLeft = 5;
-        serverReconnTimeoutActive = true;
+            clearInterval(serverPingInterval);
+            clearInterval(serverReconnCountD);
 
+            serverStatus.innerHTML = "Retrying in 5s.";
+            serverStatus.style.color = "orange";
+            serverButton.innerHTML = "Cancel";
+
+            serverReconnCountD = setInterval(reconnServer, 1000);
+            serverReconnTimeout = setTimeout(websocServer, 5000);
+
+            serverReconnTimeLeft = 5;
+            serverReconnTimeoutActive = true;
+
+        }
     }
 }
 
@@ -286,8 +336,17 @@ function checkJSON(JSONstring) {
 }
 
 function statusToFA() {
-    const modo = timer.running && !timer.countdown ? 'i' : 'p';
+
+    let modo = 'p';
+
+    if (timer.running) {
+        modo = 'i';
+    } else if (timer.coursewalk) {
+        modo = 'g';
+    }
+
     return `${modo}${timer.faults}${timer.refusals}${timer.elimination}${timer.time.toString().padStart(7, '0')}`;
+
 }
 
 function randomMac(length) {
