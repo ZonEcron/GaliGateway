@@ -18,9 +18,9 @@ var timer = {
 	refusals: 0,
 	elimination: 0,
 	running: false,
-	precission: 0,
-	countdown: 0,
+	countdown: false,
 	coursewalk: false,
+	precission: 0,
 	uptime: 0,
 }
 
@@ -35,8 +35,6 @@ setInterval(() => {
 
 	const ahora = new Date().getTime();
 
-
-
 	if (timer.coursewalk) {
 		if (ahora > inicio) {
 			timer.time = 0;
@@ -46,8 +44,15 @@ setInterval(() => {
 			timer.running = false;
 			timer.countdown = 0;
 			timer.coursewalk = false;
-		}  else {
+		} else {
 			timer.time = inicio - ahora;
+		}
+	} else if ( timer.countdown) {
+		timer.time = ahora - inicio;
+		if (ahora > inicio) {
+			timer.running = true;
+			timer.countdown = 0;
+			timer.coursewalk = false;
 		}
 	} else if (timer.running) {
 		timer.time = ahora - inicio;
@@ -79,7 +84,7 @@ wss.on('connection', function connection(ws) {
 				timer.elimination = 0;
 				timer.running = false;
 				timer.countdown = 0;
-				timer.coursewalk = 0;
+				timer.coursewalk = false;
 
 			} else if (parsedData.hasOwnProperty("coursewalk")) {
 				if (!timer.coursewalk) {
@@ -91,6 +96,18 @@ wss.on('connection', function connection(ws) {
 					timer.running = false;
 					timer.countdown = 0;
 					timer.coursewalk = true;
+				}
+
+			} else if (parsedData.hasOwnProperty("countdown")) {
+				if (!timer.countdown) {
+					inicio = Date.now() + 15000;
+					timer.time = -15000;
+					timer.faults = 0;
+					timer.refusals = 0;
+					timer.elimination = 0;
+					timer.running = true;
+					timer.countdown = 1;
+					timer.coursewalk = false;
 				}
 
 			} else {
