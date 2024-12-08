@@ -27,7 +27,13 @@ var timer = {
 
 // Mensajes de inicio
 console.clear();
-console.log("\nGalican Timer Simulator running on localhost:3000\n\nType  s + enter   to emulate timer start/stop\n")
+console.log(`\
+	Galican Timer Simulator running on localhost:3000
+	Commans + enter:
+	s	->	timer start/stop
+	d	->	discconect all clients
+	e	->	discconect all clients and exit application
+	`)
 
 
 // envio ciclico del estado del crono cada 500 ms.
@@ -47,7 +53,7 @@ setInterval(() => {
 		} else {
 			timer.time = inicio - ahora;
 		}
-	} else if ( timer.countdown) {
+	} else if (timer.countdown) {
 		timer.time = ahora - inicio;
 		if (ahora > inicio) {
 			timer.running = true;
@@ -69,7 +75,9 @@ setInterval(() => {
 
 // imprimir lo que se recibe si es json valido
 wss.on('connection', function connection(ws) {
-	console.log('Client connected\n');
+
+	ws.id = Date.now() % 10000;
+	console.log('Client connected. ID:', ws.id);
 
 	ws.on('message', function message(data) {
 		const parsedData = checkJSON(data);
@@ -120,6 +128,10 @@ wss.on('connection', function connection(ws) {
 		}
 
 	});
+
+	ws.on('close', () => {
+		console.log('Client disconnected.');
+	});
 });
 
 // start stop del crono tecleando s en consola
@@ -130,7 +142,9 @@ stdin.addListener("data", d => {
 		if (timer.running) {
 			timer.running = false;
 			timer.time = Date.now() - inicio;
-			console.log("Timer stopped. Time:", timer.time);
+			console.log("Timer stopped.");
+			console.log("Real  Time:", timer.time);
+			console.log("Round Time:", Math.round(timer.time / 10) * 10);
 		} else {
 			timer.running = true;
 			inicio = Date.now();
@@ -139,6 +153,22 @@ stdin.addListener("data", d => {
 			timer.elimination = 0;
 			console.log("Timer started");
 		}
+	}
+	if (data === 'd') {
+		console.log('Disconnecting all clients.');
+		wss.clients.forEach(client => {
+			client.close(1000, 'Disconection requested from timer operator'); // Cierra la conexión con un código y un mensaje
+			console.log('Disconnecting client ID:', client.id);
+		});
+	}
+	if (data === 'e') {
+		console.log('Disconnecting all clients.');
+		wss.clients.forEach(client => {
+			client.close(1000, 'Disconection requested from timer operator'); // Cierra la conexión con un código y un mensaje
+			console.log('Disconnecting client ID:', client.id);
+		});
+		console.log('Exiting app.');
+		process.exit(0);
 	}
 });
 
